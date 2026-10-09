@@ -1,0 +1,6 @@
+node_modules/
+server/logs/*/
+!server/logs/.gitkeep
+firmware/secrets.h
+.DS_Store
+*.log

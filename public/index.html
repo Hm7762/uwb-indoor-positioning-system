@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SmartHat — Data Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f0e;--card:#131510;--border:#1c1f1b;
+  --text:#c4c0b0;--muted:#4a5248;--accent:#1D9E75;
+  --amber:#BA7517;--red:#dc2626;--blue:#3B82F6;
+  --t0:#1D9E75;--t1:#BA7517;
+  --a0:#6366f1;--a1:#8b5cf6;--a2:#a855f7;
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:13px;padding:14px;min-height:100vh}
+nav{display:flex;gap:8px;margin-bottom:14px;align-items:center}
+nav a{font-size:12px;padding:5px 12px;border-radius:5px;text-decoration:none;color:var(--muted);border:0.5px solid var(--border)}
+nav a.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+nav a:hover:not(.active){color:var(--text)}
+h1{font-size:14px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-right:auto}
+
+#status{display:flex;gap:10px;align-items:center;margin-bottom:12px;padding:7px 12px;background:var(--card);border:0.5px solid var(--border);border-radius:7px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--red)}
+.dot.live{background:var(--accent)}
+.status-txt{font-size:11px;color:var(--muted)}
+.status-time{font-size:11px;color:var(--muted);margin-left:auto}
+
+.section{margin-bottom:12px}
+.section-title{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+
+.tag-block{margin-bottom:10px}
+.tag-header{font-size:12px;font-weight:500;padding:6px 10px;border-radius:6px 6px 0 0;border:0.5px solid var(--border)}
+.tag-header.t0{background:#0d1f17;color:var(--t0);border-color:#1a3326}
+.tag-header.t1{background:#1f1608;color:var(--t1);border-color:#3a2a0a}
+.anchor-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border)}
+.anchor-cell{background:var(--card);padding:10px;border:none}
+.anchor-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px}
+.range-raw{font-size:20px;font-weight:500;font-family:monospace;line-height:1}
+.range-stats{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.7;font-family:monospace}
+.fail-badge{font-size:9px;background:#2a0a0a;color:var(--red);padding:1px 6px;border-radius:3px}
+
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.card{background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:12px}
+h2{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px}
+
+table{width:100%;border-collapse:collapse}
+th{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;text-align:left;padding:3px 0;border-bottom:0.5px solid var(--border)}
+td{padding:4px 0;border-bottom:0.5px solid var(--border);font-size:11px;font-family:monospace}
+td:first-child{font-family:system-ui;font-size:10px;color:var(--muted)}
+tr:last-child td{border:none}
+
+.cal-row{display:flex;gap:7px;flex-wrap:wrap;align-items:flex-end;margin-bottom:9px}
+.f{display:flex;flex-direction:column;gap:2px}
+.f label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.f select,.f input{background:var(--bg);border:0.5px solid var(--border);color:var(--text);border-radius:4px;padding:4px 7px;font-size:11px;font-family:monospace;width:110px}
+button{background:var(--accent);color:#fff;border:none;border-radius:4px;padding:5px 12px;font-size:11px;cursor:pointer}
+button:hover{opacity:.85}
+pre#cal-out{font-family:monospace;font-size:11px;line-height:1.75;padding:9px;background:var(--bg);border:0.5px solid var(--border);border-radius:5px;white-space:pre-wrap;color:var(--muted)}
+.hi{color:var(--accent);font-weight:500}
+
+.csv-links{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.csv-link{font-size:10px;color:var(--accent);text-decoration:none;padding:3px 8px;border:0.5px solid var(--accent);border-radius:3px}
+.csv-link:hover{background:var(--accent);color:#fff}
+
+#log{height:120px;overflow-y:auto;font-family:monospace;font-size:10px;color:var(--muted);background:var(--bg);padding:7px;border-radius:5px;border:0.5px solid var(--border)}
+#log div{padding:1px 0;border-bottom:0.5px solid #13150f}
+</style>
+</head>
+<body>
+
+<div id="status">
+  <div class="dot" id="dot"></div>
+  <span class="status-txt" id="stxt">Connecting...</span>
+  <span class="status-time" id="stime">—</span>
+</div>
+
+<nav>
+  <h1>SmartHat — Data</h1>
+  <a href="/" class="active">Data</a>
+  <a href="/sim.html">Simulation</a>
+</nav>
+
+<!-- Range panels -->
+<div class="section">
+  <div class="section-title">Live ranges</div>
+
+  <div class="tag-block">
+    <div class="tag-header t0">Tag 0 — Helmet (worker)</div>
+    <div class="anchor-grid">
+      <div class="anchor-cell" id="t0a0">
+        <div class="anchor-label" style="color:var(--a0)">Anchor 0</div>
+        <div class="range-raw" id="t0a0-r">--</div>
+        <div class="range-stats" id="t0a0-s">μ -- σ -- n --</div>
+      </div>
+      <div class="anchor-cell" id="t0a1">
+        <div class="anchor-label" style="color:var(--a1)">Anchor 1</div>
+        <div class="range-raw" id="t0a1-r">--</div>
+        <div class="range-stats" id="t0a1-s">μ -- σ -- n --</div>
+      </div>
+      <div class="anchor-cell" id="t0a2">
+        <div class="anchor-label" style="color:var(--a2)">Anchor 2</div>
+        <div class="range-raw" id="t0a2-r">--</div>
+        <div class="range-stats" id="t0a2-s">μ -- σ -- n --</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tag-block">
+    <div class="tag-header t1">Tag 1 — Equipment (target)</div>
+    <div class="anchor-grid">
+      <div class="anchor-cell" id="t1a0">
+        <div class="anchor-label" style="color:var(--a0)">Anchor 0</div>
+        <div class="range-raw" id="t1a0-r">--</div>
+        <div class="range-stats" id="t1a0-s">μ -- σ -- n --</div>
+      </div>
+      <div class="anchor-cell" id="t1a1">
+        <div class="anchor-label" style="color:var(--a1)">Anchor 1</div>
+        <div class="range-raw" id="t1a1-r">--</div>
+        <div class="range-stats" id="t1a1-s">μ -- σ -- n --</div>
+      </div>
+      <div class="anchor-cell" id="t1a2">
+        <div class="anchor-label" style="color:var(--a2)">Anchor 2</div>
+        <div class="range-raw" id="t1a2-r">--</div>
+        <div class="range-stats" id="t1a2-s">μ -- σ -- n --</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="grid2">
+  <!-- Stats table -->
+  <div class="card">
+    <h2>Statistics summary</h2>
+    <table>
+      <thead><tr><th>Pair</th><th>Mean</th><th>Std</th><th>Min</th><th>Max</th><th>n</th></tr></thead>
+      <tbody id="stats-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Calibration -->
+  <div class="card">
+    <h2>Antenna delay calibration</h2>
+    <div class="cal-row">
+      <div class="f"><label>Tag</label>
+        <select id="c-tag"><option value="0">Tag 0</option><option value="1">Tag 1</option></select></div>
+      <div class="f"><label>Anchor</label>
+        <select id="c-anc"><option value="0">Anchor 0</option><option value="1">Anchor 1</option><option value="2">Anchor 2</option></select></div>
+      <div class="f"><label>True dist (m)</label>
+        <input id="c-dist" type="number" value="1.000" step="0.001" min="0.1"></div>
+      <button onclick="calibrate()">Calculate</button>
+    </div>
+    <pre id="cal-out">Place boards at known distance → collect readings → click Calculate</pre>
+  </div>
+</div>
+
+<!-- Data files + log -->
+<div class="grid2" style="margin-top:10px">
+  <div class="card">
+    <h2>CSV data files</h2>
+    <p style="color:var(--muted);font-size:10px;margin-bottom:6px">One file per tag-anchor pair + one position file per tag</p>
+    <div class="csv-links" id="csv-links">
+      <span style="color:var(--muted);font-size:10px">Files appear when data arrives</span>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Event log</h2>
+    <div id="log"></div>
+  </div>
+</div>
+
+<script>
+const stats  = {}   // key: "t{i}a{j}" → { window, mean, std, min, max }
+const knownCsvs = new Set()
+
+function key(t, a) { return `t${a}a${a}` }
+
+function updateRange(d) {
+  const k = `t${d.tag}a${d.anchor}`
+  const rEl = document.getElementById(`${k}-r`)
+  const sEl = document.getElementById(`${k}-s`)
+  if (!rEl) return
+
+  rEl.textContent = d.dist.toFixed(3) + ' m'
+  rEl.style.color = d.dist < 0 ? 'var(--red)' : d.tag === 0 ? 'var(--t0)' : 'var(--t1)'
+
+  // Rolling stats
+  if (!stats[k]) stats[k] = { w: [], tag: d.tag, anchor: d.anchor }
+  stats[k].w.push(d.dist)
+  if (stats[k].w.length > 100) stats[k].w.shift()
+
+  const w = stats[k].w
+  const mean = w.reduce((a,b)=>a+b,0)/w.length
+  const std  = Math.sqrt(w.reduce((a,b)=>a+(b-mean)**2,0)/w.length)
+  const mn   = Math.min(...w), mx = Math.max(...w)
+  stats[k].mean = mean; stats[k].std = std
+  stats[k].min  = mn;   stats[k].max = mx
+
+  if (sEl) sEl.textContent =
+    `μ ${mean.toFixed(3)}  σ ${std.toFixed(4)}  n ${w.length}`
+
+  updateStatsTable(d.tag, d.anchor, mean, std, mn, mx, w.length)
+
+  // CSV links
+  const csvKey = `tag${d.tag}_anchor${d.anchor}`
+  if (!knownCsvs.has(csvKey)) {
+    knownCsvs.add(csvKey)
+    renderCsvLinks()
+  }
+}
+
+function updateStatsTable(t, a, mean, std, mn, mx, n) {
+  const rowId = `sr-t${t}a${a}`
+  let row = document.getElementById(rowId)
+  if (!row) {
+    row = document.createElement('tr')
+    row.id = rowId
+    document.getElementById('stats-body').appendChild(row)
+  }
+  const tc = t === 0 ? 'var(--t0)' : 'var(--t1)'
+  const ac = ['var(--a0)','var(--a1)','var(--a2)'][a]
+  row.innerHTML = `
+    <td><span style="color:${tc}">T${t}</span>→<span style="color:${ac}">A${a}</span></td>
+    <td>${mean.toFixed(3)}m</td>
+    <td>${std.toFixed(4)}m</td>
+    <td>${mn.toFixed(3)}m</td>
+    <td>${mx.toFixed(3)}m</td>
+    <td>${n}</td>`
+}
+
+function renderCsvLinks() {
+  const c = document.getElementById('csv-links')
+  c.innerHTML = ''
+  knownCsvs.forEach(name => {
+    const a = document.createElement('a')
+    a.href = `/logs/${name}.csv`
+    a.className = 'csv-link'
+    a.download = `${name}.csv`
+    a.textContent = `${name}.csv`
+    c.appendChild(a)
+  })
+  // Position files
+  ;[0,1].forEach(t => {
+    const name = `tag${t}_position`
+    const a = document.createElement('a')
+    a.href = `/logs/${name}.csv`
+    a.className = 'csv-link'
+    a.download = `${name}.csv`
+    a.textContent = `${name}.csv`
+    c.appendChild(a)
+  })
+}
+
+function addLog(msg, color) {
+  const log = document.getElementById('log')
+  const d   = document.createElement('div')
+  d.textContent = new Date().toLocaleTimeString() + '  ' + msg
+  if (color) d.style.color = color
+  log.appendChild(d)
+  if (log.children.length > 300) log.removeChild(log.firstChild)
+  log.scrollTop = log.scrollHeight
+}
+
+async function calibrate() {
+  const t  = document.getElementById('c-tag').value
+  const a  = document.getElementById('c-anc').value
+  const di = document.getElementById('c-dist').value
+  const el = document.getElementById('cal-out')
+  el.textContent = 'Calculating...'
+  try {
+    const r = await fetch(`/api/calibrate?tag=${t}&anchor=${a}&true_dist=${di}`)
+    const d = await r.json()
+    if (d.error) { el.textContent = '⚠ ' + d.error; return }
+    el.innerHTML =
+      `Tag ${d.tag} ↔ Anchor ${d.anchor}  |  True: ${d.true_dist_m} m\n` +
+      `Last measured:   ${d.measured_m} m\n` +
+      `Error:           ${d.error_m > 0?'+':''}${d.error_m} m\n` +
+      `Current delay:   ${d.current_delay} ticks\n` +
+      `Correction:      ${d.correction_ticks > 0?'+':''}${d.correction_ticks} ticks\n` +
+      `<span class="hi">New ANT_DELAY:   ${d.new_ant_delay} ticks</span>\n\n` +
+      `In anchor + both tag firmwares change:\n` +
+      `  #define TX_ANT_DLY  ${d.current_delay}\n` +
+      `  #define RX_ANT_DLY  ${d.current_delay}\n` +
+      `To:\n` +
+      `<span class="hi">  #define TX_ANT_DLY  ${d.new_ant_delay}</span>\n` +
+      `<span class="hi">  #define RX_ANT_DLY  ${d.new_ant_delay}</span>`
+  } catch(e) { el.textContent = 'Server error: ' + e.message }
+}
+
+// WebSocket
+let ws
+function connect() {
+  ws = new WebSocket(`ws://${location.host}`)
+  ws.onopen = () => {
+    document.getElementById('dot').classList.add('live')
+    document.getElementById('stxt').textContent = 'Live'
+    addLog('Connected', 'var(--accent)')
+  }
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('stime').textContent =
+      'Last: ' + new Date().toLocaleTimeString()
+
+    if (d.type === 'range') {
+      updateRange(d)
+      addLog(`T${d.tag}→A${d.anchor}  ${d.dist.toFixed(3)}m`,
+        d.tag === 0 ? 'var(--t0)' : 'var(--t1)')
+    }
+    if (d.type === 'fail') {
+      addLog(`T${d.tag}→A${d.anchor}  FAIL`, 'var(--red)')
+    }
+    if (d.type === 'guidance') {
+      addLog(`GUIDANCE  bearing=${d.bearing}°  dist=${d.dist}m`, 'var(--amber)')
+    }
+  }
+  ws.onclose = () => {
+    document.getElementById('dot').classList.remove('live')
+    document.getElementById('stxt').textContent = 'Disconnected'
+    setTimeout(connect, 2000)
+  }
+}
+connect()
+</script>
+</body>
+</html>

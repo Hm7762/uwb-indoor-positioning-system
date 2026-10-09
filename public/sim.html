@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SmartHat — Live Simulation</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d0f0e;--card:#131510;--border:#1c1f1b;
+  --text:#c4c0b0;--muted:#4a5248;--accent:#1D9E75;
+  --t0:#1D9E75;--t1:#BA7517;
+  --a0:#6366f1;--a1:#8b5cf6;--a2:#a855f7;
+  --red:#dc2626;--amber:#f59e0b;
+}
+body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:13px;padding:14px;min-height:100vh;display:flex;flex-direction:column}
+nav{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+nav a{font-size:12px;padding:5px 12px;border-radius:5px;text-decoration:none;color:var(--muted);border:0.5px solid var(--border)}
+nav a.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+h1{font-size:14px;font-weight:500;color:var(--accent);text-transform:uppercase;letter-spacing:.08em;margin-right:auto}
+
+#status{display:flex;gap:10px;align-items:center;margin-bottom:12px;padding:7px 12px;background:var(--card);border:0.5px solid var(--border);border-radius:7px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--red)}.dot.live{background:var(--accent)}
+.stxt{font-size:11px;color:var(--muted)}.stime{font-size:11px;color:var(--muted);margin-left:auto}
+
+#main{display:grid;grid-template-columns:1fr 260px;gap:10px;flex:1}
+
+#canvas-wrap{border:0.5px solid var(--border);border-radius:8px;overflow:hidden;background:#0a0c0a;position:relative}
+#sim-canvas{display:block;width:100%;height:100%}
+#canvas-label{position:absolute;top:10px;left:12px;font-size:10px;color:#2a4a38;text-transform:uppercase;letter-spacing:.06em}
+
+#sidebar{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--card);border:0.5px solid var(--border);border-radius:8px;padding:11px}
+h2{font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+
+.tag-stat{margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid var(--border)}
+.tag-stat:last-child{margin:0;padding:0;border:none}
+.ts-label{font-size:10px;font-weight:500;margin-bottom:4px}
+.ts-row{display:flex;justify-content:space-between;font-size:11px;font-family:monospace;padding:1px 0}
+.ts-row .l{color:var(--muted);font-family:system-ui;font-size:10px}
+
+.guidance-box{padding:8px;border-radius:5px;background:var(--bg);border:0.5px solid var(--border);margin-top:6px;text-align:center}
+.guidance-cmd{font-size:16px;font-weight:500;color:var(--amber);margin-bottom:3px}
+.guidance-sub{font-size:11px;color:var(--muted);font-family:monospace}
+
+.legend{display:flex;flex-direction:column;gap:5px}
+.leg-row{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted)}
+.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.leg-line{width:20px;height:2px;flex-shrink:0}
+
+#log{height:100px;overflow-y:auto;font-family:monospace;font-size:10px;color:var(--muted);background:var(--bg);padding:6px;border-radius:5px;border:0.5px solid var(--border)}
+#log div{padding:1px 0}
+</style>
+</head>
+<body>
+
+<div id="status">
+  <div class="dot" id="dot"></div>
+  <span class="stxt" id="stxt">Connecting...</span>
+  <span class="stime" id="stime">—</span>
+</div>
+
+<nav>
+  <h1>SmartHat — Simulation</h1>
+  <a href="/">Data</a>
+  <a href="/sim.html" class="active">Simulation</a>
+</nav>
+
+<div id="main">
+  <div id="canvas-wrap">
+    <canvas id="sim-canvas"></canvas>
+    <div id="canvas-label">Top-down site view</div>
+  </div>
+
+  <div id="sidebar">
+    <!-- Tag positions -->
+    <div class="card">
+      <h2>Tag positions (Kalman filtered)</h2>
+      <div class="tag-stat">
+        <div class="ts-label" style="color:var(--t0)">Helmet (Tag 0)</div>
+        <div class="ts-row"><span class="l">X</span><span id="t0x">--</span></div>
+        <div class="ts-row"><span class="l">Y</span><span id="t0y">--</span></div>
+        <div class="ts-row"><span class="l">Ranges</span><span id="t0r">-- / -- / --</span></div>
+        <div class="ts-row"><span class="l">Cycles</span><span id="t0c">0</span></div>
+      </div>
+      <div class="tag-stat">
+        <div class="ts-label" style="color:var(--t1)">Equipment (Tag 1)</div>
+        <div class="ts-row"><span class="l">X</span><span id="t1x">--</span></div>
+        <div class="ts-row"><span class="l">Y</span><span id="t1y">--</span></div>
+        <div class="ts-row"><span class="l">Ranges</span><span id="t1r">-- / -- / --</span></div>
+        <div class="ts-row"><span class="l">Cycles</span><span id="t1c">0</span></div>
+      </div>
+    </div>
+
+    <!-- Guidance -->
+    <div class="card">
+      <h2>Worker guidance</h2>
+      <div class="guidance-box">
+        <div class="guidance-cmd" id="g-cmd">Waiting...</div>
+        <div class="guidance-sub" id="g-sub">—</div>
+      </div>
+      <div style="margin-top:8px">
+        <div class="ts-row"><span class="l">Bearing</span><span id="g-bearing">--°</span></div>
+        <div class="ts-row"><span class="l">Distance</span><span id="g-dist">--m</span></div>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="card">
+      <h2>Legend</h2>
+      <div class="legend">
+        <div class="leg-row"><div class="leg-dot" style="background:var(--a0)"></div>Anchor 0 (fixed)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:var(--a1)"></div>Anchor 1 (fixed)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:var(--a2)"></div>Anchor 2 (fixed)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:var(--t0)"></div>Helmet tag (moving)</div>
+        <div class="leg-row"><div class="leg-dot" style="background:var(--t1)"></div>Equipment tag (target)</div>
+        <div class="leg-row"><div class="leg-line" style="background:var(--t0)"></div>Worker trail</div>
+        <div class="leg-row"><div class="leg-line" style="background:var(--amber);height:1px;border-top:1px dashed var(--amber)"></div>Guidance vector</div>
+      </div>
+    </div>
+
+    <!-- Log -->
+    <div class="card" style="flex:1">
+      <h2>Event log</h2>
+      <div id="log"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CV = document.getElementById('sim-canvas')
+const ctx = CV.getContext('2d')
+
+// State
+let anchors = []
+let tags    = [
+  { id:0, kf:null, raw:null, r:[null,null,null], trail:[], cycles:0, color:'#1D9E75' },
+  { id:1, kf:null, raw:null, r:[null,null,null], trail:[], cycles:0, color:'#BA7517' }
+]
+let guidance = null
+// Bumped from 80: at the old ~0.7Hz update rate 80 points was ~114s of
+// trail; at the new ~10Hz rate (see anchor.ino/tag.ino TDMA_FRAME_MS)
+// 80 points would be under 10s, so this is raised to keep a comparable
+// multi-minute trail on screen.
+const TRAIL_MAX = 300
+
+// Canvas sizing
+function resize() {
+  const wrap = document.getElementById('canvas-wrap')
+  CV.width   = wrap.clientWidth  * devicePixelRatio
+  CV.height  = wrap.clientHeight * devicePixelRatio
+  CV.style.width  = wrap.clientWidth  + 'px'
+  CV.style.height = wrap.clientHeight + 'px'
+  computeTransform()
+}
+window.addEventListener('resize', resize)
+
+// World → canvas transform — computed ONCE from the fixed anchor
+// layout (+ a generous fixed margin), cached, and only recomputed on
+// resize. Previously this was rebuilt every animation frame from the
+// anchors AND both tags' live position + trail history, so the
+// "camera" itself panned/zoomed as a tag moved or jittered — which is
+// what made on-screen movement look wrong/inconsistent even when the
+// underlying position data was fine. A fixed viewport removes that
+// artifact entirely.
+let cachedTransform = null
+const WORLD_MARGIN_M = 2   // room to show a bit beyond the anchor triangle
+
+function computeTransform() {
+  if (!anchors.length) { cachedTransform = null; return }
+  const W = CV.width / devicePixelRatio
+  const H = CV.height / devicePixelRatio
+  const PAD = 60
+
+  const allX = anchors.map(a=>a.x)
+  const allY = anchors.map(a=>a.y)
+
+  const minX = Math.min(...allX) - WORLD_MARGIN_M
+  const maxX = Math.max(...allX) + WORLD_MARGIN_M
+  const minY = Math.min(...allY) - WORLD_MARGIN_M
+  const maxY = Math.max(...allY) + WORLD_MARGIN_M
+
+  const scaleX = (W - PAD*2) / (maxX - minX)
+  const scaleY = (H - PAD*2) / (maxY - minY)
+  const scale  = Math.min(scaleX, scaleY)
+
+  cachedTransform = { minX, minY, scale, PAD,
+    W, H,
+    toC: (rx, ry) => ({
+      x: PAD + (rx - minX) * scale,
+      y: H - PAD - (ry - minY) * scale  // flip Y
+    })
+  }
+}
+
+function buildTransform() {
+  return cachedTransform
+}
+
+// Draw
+function draw() {
+  const W = CV.width / devicePixelRatio
+  const H = CV.height / devicePixelRatio
+  ctx.clearRect(0, 0, CV.width, CV.height)
+  ctx.save()
+  ctx.scale(devicePixelRatio, devicePixelRatio)
+
+  // Background
+  ctx.fillStyle = '#0a0c0a'
+  ctx.fillRect(0, 0, W, H)
+
+  const T = buildTransform()
+  if (!T) { ctx.restore(); requestAnimationFrame(draw); return }
+
+  // Grid
+  ctx.strokeStyle = '#141812'
+  ctx.lineWidth = 0.5
+  for (let m = Math.floor(T.minX); m <= Math.ceil(T.minX + (W-T.PAD*2)/T.scale + 2); m++) {
+    const {x} = T.toC(m, 0)
+    if (x < 0 || x > W) continue
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke()
+    ctx.fillStyle = '#2a3028'; ctx.font = '9px monospace'; ctx.textAlign = 'center'
+    ctx.fillText(m+'m', x, H - T.PAD + 14)
+  }
+  for (let m = Math.floor(T.minY); m <= Math.ceil(T.minY + (H-T.PAD*2)/T.scale + 2); m++) {
+    const {y} = T.toC(0, m)
+    if (y < 0 || y > H) continue
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke()
+    ctx.fillStyle = '#2a3028'; ctx.font = '9px monospace'; ctx.textAlign = 'right'
+    ctx.fillText(m+'m', T.PAD - 6, y + 3)
+  }
+
+  // Anchor triangle (shaded coverage area)
+  if (anchors.length === 3) {
+    const pts = anchors.map(a => T.toC(a.x, a.y))
+    ctx.fillStyle = 'rgba(99,102,241,0.04)'
+    ctx.beginPath()
+    ctx.moveTo(pts[0].x, pts[0].y)
+    pts.slice(1).forEach(p => ctx.lineTo(p.x, p.y))
+    ctx.closePath(); ctx.fill()
+  }
+
+  // Range circles (when tag has a position)
+  tags.forEach(tag => {
+    if (!tag.kf) return
+    const tp = T.toC(tag.kf.x, tag.kf.y)
+    anchors.forEach((anc, i) => {
+      if (tag.r[i] == null || tag.r[i] < 0) return
+      const ap = T.toC(anc.x, anc.y)
+      const r  = tag.r[i] * T.scale
+      ctx.strokeStyle = `${['#6366f1','#8b5cf6','#a855f7'][i]}22`
+      ctx.lineWidth = 0.7
+      ctx.setLineDash([3,4])
+      ctx.beginPath(); ctx.arc(ap.x, ap.y, r, 0, Math.PI*2); ctx.stroke()
+      ctx.setLineDash([])
+    })
+  })
+
+  // Tag trails
+  tags.forEach(tag => {
+    if (tag.trail.length < 2) return
+    ctx.strokeStyle = tag.color + '44'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    tag.trail.forEach((p, i) => {
+      const {x,y} = T.toC(p.x, p.y)
+      i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y)
+    })
+    ctx.stroke()
+  })
+
+  // Guidance vector (helmet → equipment)
+  if (tags[0].kf && tags[1].kf) {
+    const from = T.toC(tags[0].kf.x, tags[0].kf.y)
+    const to   = T.toC(tags[1].kf.x, tags[1].kf.y)
+    ctx.strokeStyle = '#f59e0b'
+    ctx.lineWidth = 1.2
+    ctx.setLineDash([6,4])
+    ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.lineTo(to.x, to.y); ctx.stroke()
+    ctx.setLineDash([])
+    // Arrowhead
+    const angle = Math.atan2(to.y - from.y, to.x - from.x)
+    ctx.fillStyle = '#f59e0b'
+    ctx.beginPath()
+    ctx.moveTo(to.x, to.y)
+    ctx.lineTo(to.x - Math.cos(angle-0.4)*12, to.y - Math.sin(angle-0.4)*12)
+    ctx.lineTo(to.x - Math.cos(angle+0.4)*12, to.y - Math.sin(angle+0.4)*12)
+    ctx.closePath(); ctx.fill()
+  }
+
+  // Anchors
+  const ancColors = ['#6366f1','#8b5cf6','#a855f7']
+  anchors.forEach((anc, i) => {
+    const {x, y} = T.toC(anc.x, anc.y)
+    ctx.fillStyle   = ancColors[i]
+    ctx.strokeStyle = ancColors[i] + 'aa'
+    ctx.lineWidth   = 1.5
+    // Diamond shape for anchors
+    ctx.beginPath()
+    ctx.moveTo(x, y-10); ctx.lineTo(x+10, y)
+    ctx.lineTo(x, y+10); ctx.lineTo(x-10, y)
+    ctx.closePath(); ctx.fill(); ctx.stroke()
+    ctx.fillStyle   = '#fff'
+    ctx.font        = 'bold 9px system-ui'
+    ctx.textAlign   = 'center'
+    ctx.fillText('A'+i, x, y+3)
+    ctx.fillStyle   = ancColors[i]
+    ctx.font        = '9px system-ui'
+    ctx.fillText(`(${anc.x},${anc.y})`, x, y+18)
+  })
+
+  // Tags
+  tags.forEach(tag => {
+    if (!tag.kf) return
+    const {x, y} = T.toC(tag.kf.x, tag.kf.y)
+    // Raw position ghost
+    if (tag.raw) {
+      const rp = T.toC(tag.raw.x, tag.raw.y)
+      ctx.fillStyle = tag.color + '33'
+      ctx.beginPath(); ctx.arc(rp.x, rp.y, 5, 0, Math.PI*2); ctx.fill()
+    }
+    // KF position
+    ctx.fillStyle   = tag.color
+    ctx.strokeStyle = '#0a0c0a'
+    ctx.lineWidth   = 2
+    ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI*2); ctx.fill(); ctx.stroke()
+    ctx.fillStyle   = '#fff'
+    ctx.font        = 'bold 9px system-ui'
+    ctx.textAlign   = 'center'
+    ctx.fillText('T'+tag.id, x, y+3)
+    ctx.fillStyle   = tag.color
+    ctx.font        = '9px system-ui'
+    ctx.fillText(`(${tag.kf.x.toFixed(1)},${tag.kf.y.toFixed(1)})`, x, y-16)
+  })
+
+  ctx.restore()
+  requestAnimationFrame(draw)
+}
+
+// Update sidebar
+function updateSidebar() {
+  tags.forEach(t => {
+    const pre = `t${t.id}`
+    const xEl = document.getElementById(`${pre}x`)
+    const yEl = document.getElementById(`${pre}y`)
+    const rEl = document.getElementById(`${pre}r`)
+    const cEl = document.getElementById(`${pre}c`)
+    if (t.kf) {
+      if (xEl) xEl.textContent = t.kf.x.toFixed(3) + ' m'
+      if (yEl) yEl.textContent = t.kf.y.toFixed(3) + ' m'
+    }
+    if (rEl && t.r) rEl.textContent = t.r.map(r => r!=null&&r>0?r.toFixed(2):'--').join(' / ')
+    if (cEl) cEl.textContent = t.cycles
+  })
+}
+
+function updateGuidance(g) {
+  const cmd = getCmd(g.bearing, g.dist)
+  document.getElementById('g-cmd').textContent = cmd
+  document.getElementById('g-sub').textContent =
+    `${g.dist.toFixed(2)} m  |  ${g.bearing.toFixed(1)}°`
+  document.getElementById('g-bearing').textContent = g.bearing.toFixed(1) + '°'
+  document.getElementById('g-dist').textContent    = g.dist.toFixed(3) + ' m'
+  const cmdEl = document.getElementById('g-cmd')
+  cmdEl.style.color = g.dist < 0.8 ? 'var(--accent)' :
+                      Math.abs(g.bearing) > 30 ? 'var(--red)' : 'var(--amber)'
+}
+
+function getCmd(b, d) {
+  if (d < 0.8) return '✓ ARRIVED'
+  if (b >  30) return '→ TURN RIGHT'
+  if (b >  10) return '↗ SLIGHT RIGHT'
+  if (b < -30) return '← TURN LEFT'
+  if (b < -10) return '↖ SLIGHT LEFT'
+  return '↑ STRAIGHT'
+}
+
+function addLog(msg, color) {
+  const l = document.getElementById('log')
+  const d = document.createElement('div')
+  d.textContent = new Date().toLocaleTimeString() + '  ' + msg
+  if (color) d.style.color = color
+  l.appendChild(d)
+  if (l.children.length > 200) l.removeChild(l.firstChild)
+  l.scrollTop = l.scrollHeight
+}
+
+// WebSocket
+let ws
+function connect() {
+  ws = new WebSocket(`ws://${location.host}`)
+
+  ws.onopen = () => {
+    document.getElementById('dot').classList.add('live')
+    document.getElementById('stxt').textContent = 'Live'
+    addLog('Connected', 'var(--accent)')
+  }
+
+  ws.onmessage = e => {
+    const d = JSON.parse(e.data)
+    document.getElementById('stime').textContent =
+      'Last: ' + new Date().toLocaleTimeString()
+
+    if (d.type === 'anchors') {
+      anchors = d.anchors
+      computeTransform()
+    }
+
+    if (d.type === 'position') {
+      const tag = tags[d.tag]
+      tag.kf  = d.kf
+      tag.raw = d.raw
+      tag.r   = d.r || [null,null,null]
+      tag.cycles = d.cycles || tag.cycles + 1
+
+      // Trail
+      tag.trail.push({ x: d.kf.x, y: d.kf.y })
+      if (tag.trail.length > TRAIL_MAX) tag.trail.shift()
+
+      updateSidebar()
+      addLog(`T${d.tag} pos (${d.kf.x.toFixed(2)},${d.kf.y.toFixed(2)}) r=[${(d.r||[]).map(r=>r?r.toFixed(2):'?').join(',')}]`,
+        d.tag === 0 ? 'var(--t0)' : 'var(--t1)')
+    }
+
+    if (d.type === 'guidance') {
+      guidance = d
+      updateGuidance(d)
+      addLog(`GUIDANCE ${getCmd(d.bearing,d.dist)}  dist=${d.dist.toFixed(2)}m`, 'var(--amber)')
+    }
+  }
+
+  ws.onclose = () => {
+    document.getElementById('dot').classList.remove('live')
+    document.getElementById('stxt').textContent = 'Disconnected'
+    setTimeout(connect, 2000)
+  }
+}
+
+// Init
+resize()
+draw()
+connect()
+
+// Fetch initial state (anchors + last known positions)
+fetch('/api/state').then(r=>r.json()).then(d => {
+  anchors = d.anchors
+  computeTransform()
+  d.tags.forEach(t => {
+    if (t.kfPos) {
+      tags[t.id].kf     = t.kfPos
+      tags[t.id].cycles = t.cycles
+    }
+  })
+  updateSidebar()
+}).catch(()=>{})
+</script>
+</body>
+</html>
